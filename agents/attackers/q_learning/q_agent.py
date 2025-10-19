@@ -79,9 +79,21 @@ class QAgent(BaseAgent):
             float: The maximum Q-value among all valid actions in this state
         """
         # TODO: Your code here
-        # Replace this with your implementation
-        return 0.0
-   
+        # 1. Get the current state from the observation
+        state = observation.state
+        # 2. Generate all valid actions for this state
+        actions = generate_valid_actions(state)
+        
+        if not actions:
+            return 0.0
+
+        # 3. Get the state ID
+        state_id = self.get_state_id(state)
+        
+        # 4. Find the action with the maximum Q-value
+        # Fallback to 0.0 when the state-action pair has not been seen yet
+        return max((self.q_values.get((state_id, action), 0.0) for action in actions), default=0.0)
+    
     def select_action(self, observation:Observation, testing=False) -> tuple:
         """
         TODO: Implement epsilon-greedy action selection.
@@ -110,17 +122,36 @@ class QAgent(BaseAgent):
         Returns:
             tuple: (selected_action, state_id)
         """
+        
+        # 1. Get the state and generate valid actions
         state = observation.state
         actions = generate_valid_actions(state)
+        
+        # 2. Get the state_id for this state
         state_id = self.get_state_id(state)
 
         # TODO: Implement epsilon-greedy action selection
-        # For now, just choose a random action
-        action = random.choice(list(actions))
+        if not actions:
+            raise ValueError("No valid actions available for the current state.")
 
-        # Initialize Q-value if needed
-        if (state_id, action) not in self.q_values:
-            self.q_values[state_id, action] = 0
+        # Ensure all candidate actions have an entry in the Q-table
+        for action in actions:
+            # Initialize Q-value to 0 if (state_id, action) pair doesn't exist
+            self.q_values.setdefault((state_id, action), 0.0)
+
+        explore = not testing and random.uniform(0, 1) < self.current_epsilon
+        if explore:
+            # 3. If training and random value < epsilon: choose random action
+            action = random.choice(actions)
+        else:
+            # 4. Otherwise: choose action with highest Q-value
+            max_q = max(self.q_values[(state_id, action)] for action in actions)
+            # Break ties randomly to avoid bias
+            best_actions = [action for action in actions if self.q_values[(state_id, action)] == max_q]
+            action = random.choice(best_actions)
+
+        # Q-table already initialised above, ensure key exists for the selected action
+        self.q_values.setdefault((state_id, action), 0.0)
 
         return action, state_id
 
@@ -192,7 +223,10 @@ class QAgent(BaseAgent):
                 # Hint: Use self.max_action_q(observation) to get the max Q-value of next state
 
                 # TODO: Your code here to update the Q-table
-                pass
+                current_q = self.q_values.get((state_id, action), 0.0)
+                max_next_q = self.max_action_q(observation)
+                updated_q = current_q + self.alpha * (observation.reward + self.gamma * max_next_q - current_q)
+                self.q_values[(state_id, action)] = updated_q
 
             # Check the apm (actions per minute)
             if self._apm_limit:
