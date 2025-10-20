@@ -14,8 +14,8 @@ import time
 from os import path, makedirs
 # with the path fixed, we can import now
 from AIDojoCoordinator.game_components import Action, Observation, GameState, AgentStatus
-from NetSecGameAgents.agents.base_agent import BaseAgent
-from NetSecGameAgents.agents.agent_utils import generate_valid_actions, state_as_ordered_string
+from agents.base_agent import BaseAgent
+from agents.agent_utils import generate_valid_actions, state_as_ordered_string
 
 class QAgent(BaseAgent):
 
@@ -131,13 +131,6 @@ class QAgent(BaseAgent):
         state_id = self.get_state_id(state)
 
         # TODO: Implement epsilon-greedy action selection
-        if not actions:
-            raise ValueError("No valid actions available for the current state.")
-
-        # Ensure all candidate actions have an entry in the Q-table
-        for action in actions:
-            # Initialize Q-value to 0 if (state_id, action) pair doesn't exist
-            self.q_values.setdefault((state_id, action), 0.0)
 
         explore = not testing and random.uniform(0, 1) < self.current_epsilon
         if explore:
@@ -145,15 +138,17 @@ class QAgent(BaseAgent):
             action = random.choice(actions)
         else:
             # 4. Otherwise: choose action with highest Q-value
-            max_q = max(self.q_values[(state_id, action)] for action in actions)
+            # Use .get() with default 0 to avoid KeyError
+            max_q = max(self.q_values.get((state_id, act), 0.0) for act in actions)
             # Break ties randomly to avoid bias
-            best_actions = [action for action in actions if self.q_values[(state_id, action)] == max_q]
+            best_actions = [act for act in actions if self.q_values.get((state_id, act), 0.0) == max_q]
             action = random.choice(best_actions)
 
-        # Q-table already initialised above, ensure key exists for the selected action
-        self.q_values.setdefault((state_id, action), 0.0)
+        # Initialize Q-value ONLY for the selected action if it doesn't exist
+        if (state_id, action) not in self.q_values:
+            self.q_values[(state_id, action)] = 0.0
 
-        return action, state_id
+        return (action, state_id)
 
     def recompute_reward(self, observation: Observation) -> Observation:
         """
